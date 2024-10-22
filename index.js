@@ -7,6 +7,7 @@ import { parseBuffer } from "music-metadata";
 import fs from "fs/promises";
 import path from "path";
 
+try {
 const supportedZXTuneFormats = new Set([
   "ASC",
   "FTC",
@@ -125,32 +126,40 @@ const checkDependencies = () => {
 };
 
 const parseUserFlags = (messageContent) => {
-  const def_aymClockRate = 1750000;
-  const def_aymLayout = 0;
-  const def_aymType = 0;
+  try {
+    const def_aymClockRate = 1750000;
+    const def_aymLayout = 0;
+    const def_aymType = 0;
 
-  let aymClockRate = def_aymClockRate;
-  let aymLayout = def_aymLayout;
-  let aymType = def_aymType;
+    let aymClockRate = def_aymClockRate;
+    let aymLayout = def_aymLayout;
+    let aymType = def_aymType;
 
-  if (messageContent) {
-    const userFlags = messageContent.replaceAll(" ", "").split(",");
+    if (messageContent) {
+      const userFlags = messageContent.replaceAll(" ", "").split(",");
 
-    for (const flag of userFlags) {
-      const [key, value] = flag.split("=").map((s) => s.toLowerCase());
-      if (key === "clock") {
-        const match = commonAYMChipFrequencies.find(([name]) =>
-          value.includes(name)
-        );
-        if (match) aymClockRate = match[1];
+      for (const flag of userFlags) {
+        const [key, value] = flag.split("=").map((s) => s.toLowerCase());
+        if (key === "clock") {
+          const match = commonAYMChipFrequencies.find(([name]) =>
+            value.includes(name)
+          );
+          if (match) aymClockRate = match[1];
+        }
+        if (key === "layout") {
+          const layoutIndex = commonAYMLayouts.indexOf(value);
+          if (layoutIndex !== -1) aymLayout = layoutIndex;
+        }
+        if (key === "type" && value === "ym") {
+          aymType = 1;
+        }
       }
-      if (key === "layout") {
-        const layoutIndex = commonAYMLayouts.indexOf(value);
-        if (layoutIndex !== -1) aymLayout = layoutIndex;
-      }
-      if (key === "type" && value === "ym") {
-        aymType = 1;
-      }
+    }
+    catch (e) {
+      await message.reply(
+        "fuckup at user flag parse",
+        { failIfNotExists: false }
+      );
     }
   }
 
@@ -205,78 +214,86 @@ const convertWithArkos = (inputPath, outputWavPath, outputMp3Path) => {
 };
 
 const handleConversion = async (message, extension, buffer, attachment) => {
-  const inputPath = attachment.name;
-  const mp3Path = `${inputPath}.mp3`;
-  const reply = await message.reply(
-    "🤖 Initiating file conversion to format audible by humans. Please standby...",
-    { failIfNotExists: false }
-  );
-
-  writeFileSync(inputPath, buffer);
-
-  const userFlags = parseUserFlags(message.content);
-
   try {
-    if (supportedZXTuneFormats.has(extension)) {
-      // ZXTune
-      convertWithZXTune(inputPath, mp3Path, userFlags);
-    } else if (supportedFurnaceFormats.has(extension)) {
-      // Furnace
-      const wavPath = `${inputPath}.wav`;
-      convertWithFurnace(inputPath, wavPath, mp3Path);
-      rmSync(wavPath);
-    } else if (supportedChipnsfxFormats.has(extension)) {
-      // chipnsfx
-      const wavPath = `${inputPath}.wav`;
-      convertWithChipnsfx(inputPath, wavPath, mp3Path);
-      rmSync(wavPath);
-    } else if (supportedPSGplayFormats.has(extension)) {
-      // psgplay
-      const wavPath = `${inputPath}.wav`;
-      convertWithPSGplay(inputPath, wavPath, mp3Path);
-      rmSync(wavPath);
-    } else if (supportedArkosFormats.has(extension)) {
-      // Arkos Tracker 2
-      const wavPath = `${inputPath}.wav`;
-      convertWithArkos(inputPath, wavPath, mp3Path);
-      rmSync(wavPath);
-    }
-
-    const mp3Buffer = readFileSync(mp3Path);
-    const metadata = await parseBuffer(mp3Buffer, {
-      mimeType: "audio/mpeg",
-      size: mp3Buffer.length,
-    });
-    const artist = metadata.common.artist;
-    const title = metadata.common.title;
-
-    let messageContent;
-    if (artist && title) {
-      messageContent = `🎶 Your track "${title}" by ${artist} is ready for listening! 🎧🔥`;
-    } else if (artist) {
-      messageContent = `🎶 Your track by ${artist} is ready for listening! 🎧🔥`;
-    } else if (title) {
-      messageContent = `🎶 Your track "${title}" is ready for listening! 🎧🔥`;
-    } else {
-      messageContent = `🎶 Your track is ready for listening! 🎧🔥`;
-    }
-
-    await reply.edit({
-      content: messageContent,
-      files: [
-        new AttachmentBuilder()
-          .setName(`${attachment.name}.mp3`)
-          .setFile(mp3Buffer),
-      ],
-    });
-  } catch (error) {
-    console.error("Error during conversion:", error);
-    await reply.edit(
-      `🤖 An error occurred during the conversion process. Please try again. ${error}`
+    const inputPath = attachment.name;
+    const mp3Path = `${inputPath}.mp3`;
+    const reply = await message.reply(
+      "🤖 Initiating file conversion to format audible by humans. Please standby...",
+      { failIfNotExists: false }
     );
-  } finally {
-    rmSync(inputPath);
-    rmSync(mp3Path);
+
+    writeFileSync(inputPath, buffer);
+
+    const userFlags = parseUserFlags(message.content);
+
+    try {
+      if (supportedZXTuneFormats.has(extension)) {
+        // ZXTune
+        convertWithZXTune(inputPath, mp3Path, userFlags);
+      } else if (supportedFurnaceFormats.has(extension)) {
+        // Furnace
+        const wavPath = `${inputPath}.wav`;
+        convertWithFurnace(inputPath, wavPath, mp3Path);
+        rmSync(wavPath);
+      } else if (supportedChipnsfxFormats.has(extension)) {
+        // chipnsfx
+        const wavPath = `${inputPath}.wav`;
+        convertWithChipnsfx(inputPath, wavPath, mp3Path);
+        rmSync(wavPath);
+      } else if (supportedPSGplayFormats.has(extension)) {
+        // psgplay
+        const wavPath = `${inputPath}.wav`;
+        convertWithPSGplay(inputPath, wavPath, mp3Path);
+        rmSync(wavPath);
+      } else if (supportedArkosFormats.has(extension)) {
+        // Arkos Tracker 2
+        const wavPath = `${inputPath}.wav`;
+        convertWithArkos(inputPath, wavPath, mp3Path);
+        rmSync(wavPath);
+      }
+
+      const mp3Buffer = readFileSync(mp3Path);
+      const metadata = await parseBuffer(mp3Buffer, {
+        mimeType: "audio/mpeg",
+        size: mp3Buffer.length,
+      });
+      const artist = metadata.common.artist;
+      const title = metadata.common.title;
+
+      let messageContent;
+      if (artist && title) {
+        messageContent = `🎶 Your track "${title}" by ${artist} is ready for listening! 🎧🔥`;
+      } else if (artist) {
+        messageContent = `🎶 Your track by ${artist} is ready for listening! 🎧🔥`;
+      } else if (title) {
+        messageContent = `🎶 Your track "${title}" is ready for listening! 🎧🔥`;
+      } else {
+        messageContent = `🎶 Your track is ready for listening! 🎧🔥`;
+      }
+
+      await reply.edit({
+        content: messageContent,
+        files: [
+          new AttachmentBuilder()
+            .setName(`${attachment.name}.mp3`)
+            .setFile(mp3Buffer),
+        ],
+      });
+    } catch (error) {
+      console.error("Error during conversion:", error);
+      await reply.edit(
+        `🤖 An error occurred during the conversion process. Please try again. ${error}`
+      );
+    } finally {
+      rmSync(inputPath);
+      rmSync(mp3Path);
+    }
+  }
+  catch (e) {
+  	await message.reply(
+  	  "fuckup at conversion",
+  	  { failIfNotExists: false }
+  	);
   }
 };
 
@@ -350,3 +367,10 @@ client.on("messageCreate", async (message) => {
 });
 checkDependencies();
 client.login(process.env.BOT_TOKEN);
+}
+catch (e) {
+	await message.reply(
+      "okay what the FUCK",
+	  { failIfNotExists: false }
+	);
+}
